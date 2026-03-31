@@ -1,0 +1,276 @@
+# Peg solitaire by Red Void
+
+# == Shared variables ==
+# b — bits, contains the number of pegs left ('1' bits in the field register)
+# f — field, contains current field state
+# i — iterator, auxiliary register to use in win-lose counting
+# l — string length
+# n — number
+# p — possible moves
+# 1,2,3,4,5,6,7,8,9,0 — auxiliary registers to use in non-recursive functions.
+
+
+# ARITHMETICS
+
+# Function in the register 'B': bit calculator. Converts user input into a corresponding field bit. Works properly only with valid input!
+# I'm not gonna lie, it's not the simplest formula ever :D However, you may consider it this way:
+# result = f(y) - g(y)*y - x
+# f(y) = 43 - 24*(y // 6) + 7*(y // 3)
+# g(y) = 4 + 3*(y // 3) - 6*(y // 6)
+# And yes, it works.
+#
+# Gets from the main stack: 
+# 	x-coordinate
+# 	y-coordinate
+# Puts into the main stack:
+# 	bit number in the field representation
+[
+	s7 s8 
+	43 l8 6 / 24 * - l8 3 / 7 * + 4 l8 3 / 3 * + l8 6 / 6 * - l8 * - l7 -
+] sB
+
+
+# MOVE ANALYSIS
+
+# Function in the register 'A': appropriate move. Checks if you have pegs in the proper places to make your move.
+# Gets from the main stack:
+# 	final coordinate
+# 	start coordinate
+# Puts into the main stack:
+# 	start coordinate
+# 	final coordinate
+# 	0 if there is a peg in the starting cell, there is no peg in the final cell and there is a peg in the middle, 1 otherwise
+[
+	s2 s1 l1 l2
+
+	# Starting point
+	l1 10 / s3
+	l1 10 % s4
+	l3 l4 lBx s1
+
+	# Final point
+	l2 10 / s5
+	l2 10 % s6
+	l5 l6 lBx s2
+
+	# Middle point
+	l3 l5 + 2 /
+	l4 l6 + 2 /
+	lBx s3
+
+	lf 2 l1 ^ / 2 % s1 # Starting point bit value
+	lf 2 l2 ^ / 2 % s2 # Final point bit value
+	lf 2 l3 ^ / 2 % s3 # Middle point bit value
+
+	# 1-start*middle*(1-finish)
+	1 l1 l3 * 1 l2 - * -
+] sA
+
+
+# Function in the register 'D': difference. Checks if the distance between two cells permits making a move.
+# Gets from the main stack:
+# 	final coordinate
+# 	start coordinate
+# Puts into the main stack:
+# 	start coordinate
+# 	final coordinate
+# 	0 if the distance is valid, 1 otherwise
+[
+	[1 q] s9
+	s1 s2 l2 l1
+
+	l1 10 / s3 # y1
+	l1 10 % s4 # x1
+
+	l2 10 / s5 # y2
+	l2 10 % s6 # y2
+
+	# (x1-x2)*(y1-y2) + 100*(x1-x2+2)*(x1-x2-2)*(y1-y2+2)*(y1-y2-2)
+	# It should be zero in case (x1=x2 OR y1=y2) AND (|x1-x2|=2 OR |y1-y2|=2), non-zero otherwise.
+	# I use 100 as a multiplier because the absolute value of the first half is definitely less than 100.
+	l3 l5 - l4 l6 - * 100 l3 l5 2 + - l3 l5 2 - - * l4 l6 2 + - l4 l6 2 - - * * * +
+	0 !=9 # Returns 1 in case the value is non-zero 
+	0     # Returns 0
+] sD
+
+
+# Function in the register 'E': existence. Checks if there are two corresponding cells on the board.
+# Example: 13 15 -> 0 ; 44 77 -> 1 (77 does not exist).
+# Gets from the main stack:
+# 	final coordinate
+# 	start coordinate
+# Puts into the main stack:
+# 	start coordinate
+# 	final coordinate
+# 	0 if both coordinates are valid, 1 otherwise
+[
+	[1 q] s9
+	s1 s2 l2 l1
+
+	l1 10 / s3
+	l1 10 % s4
+	# The logic behind this formula is similar to the one in the 'D' function. Try to analyze it on your own ;)
+	1 l3 3 / 2 % - 1 l4 3 / 2 % - l3 2 % l4 2 % + * * 100 1 l3 3 / 2 % - 1 l4 3 / 2 % - l3 2 % l4 2 % + * * * +
+	0 !=9 # Returns 1 in case the value is non-zero 
+
+	l2 10 / s3
+	l2 10 % s4
+	1 l3 3 / 2 % - 1 l4 3 / 2 % - l3 2 % l4 2 % + * * 100 1 l3 3 / 2 % - 1 l4 3 / 2 % - l3 2 % l4 2 % + * * * +
+	0 !=9 # Returns 1 in case the value is non-zero 
+
+	0     # Returns 0
+] sE
+
+
+# Function in the register 'V': validation. Fully validates user input, clears the main stack in case it is invalid.
+# Gets from the main stack:
+# 	final coordinate
+# 	start coordinate
+# Puts into the main stack:
+# 	start coordinate if both coordinates are valid
+# 	final coordinate if both coordinates are valid
+# 	0 if both coordinates are valid, 1 otherwise
+[
+	[c 1 q] s0
+	lEx 0 !=0 
+	lDx 0 !=0
+	lAx 0 !=0
+	0
+] sV
+
+
+# BOARD ANALYSIS
+
+# Function in the register 'L': lose check. Analyzes a current field state and counts all the possible moves.
+# The function is recursive, that's why it's easier to use shared variables instead of stack.
+# Gets from the shared variables:
+# 	f: current field state
+# 	i: iterator
+# 	p: possible moves
+[
+	li 49 / 7 ~ 1 + 10 * + 1 + 
+	li 49 % 7 ~ 1 + 10 * + 1 +
+	lVx 1 - lp + sp
+	li 1 + si
+	li 2401 >L
+] sL
+
+
+# Function in the register 'W': win check. Analyzes a current field state and counts all the pegs left.
+# The function is recursive, that's why it's easier to use shared variables instead of stack.
+# Gets from the shared variables:
+# 	b: current '1' bits number on the field (pegs left)
+# 	f: current field state
+# 	i: iterator
+[
+	lb lf 2 li ^ / 2 % + sb li 1 + si li 36 >W
+] sW
+
+
+# Function in the register 'F': finish check. Analyzes a current field state and quits in case of win or lose.
+# Gets from the shared variables:
+# 	f: current field state
+[
+	# Win combination analysis
+	0 si
+	0 sb
+	[[Congratulations!] P 10 P 10000 Q] s1
+	lWx
+	lb 1=1
+
+	# Lose combination analysis
+	0 si
+	0 sp
+	lLx
+	[[Game over!] P 10 P 10000 Q] s1
+	lp 0=1
+] sF
+
+
+# PRINTING
+
+# Function in the register '*'. puts [*] into the main stack
+[[*]] s*
+
+
+# Function in the register '.'. puts [.] into the main stack
+[[.]] s.
+
+
+# Function in the register 'I': illegal move. Prints a corresponding message and proceeds to the next iteration of the main function.
+[[Illegal move] P 10 P lMx] sI
+
+
+# Function in the register 'C': converter. Converts a number into a binary form with '*' and '.' symbols and prints it.
+# Example: 13 6 -> ..**.*
+# The function is recursive, that's why it's easier to use shared variables instead of stack.
+# Gets from the shared variables:
+# 	l: desirable string length
+# 	n: number to print
+[
+	ll 1 - sl
+	ln 2 ll ^ / 2 % s1
+	l1 1 =* l1 0 =. P
+	ll 0 <C
+] sC
+
+
+# Function in the register 'P': print. Takes a current field state from the 'f' register and prints it with '*' and '.' symbols.
+# Gets from the shared variables:
+# 	f: current field state
+[
+	[  1234567] P 10 P
+	[1   ] P lf 2 34 ^ / sn 3 sl lCx  [  ] P 10 P c
+	[2  ] P lf 2 34 ^ % 2 29 ^ / sn 5 sl lCx [ ] P 10 P c
+	[3 ] P lf 2 29 ^ % 2 22 ^ / sn 7 sl lCx [] P 10 P c
+	[4 ] P lf 2 22 ^ % 2 15 ^ / sn 7 sl lCx [] P 10 P c
+	[5 ] P lf 2 15 ^ % 2 8 ^ / sn 7 sl lCx [] P 10 P c
+	[6  ] P lf 2 8 ^ % 2 3 ^ / sn 5 sl lCx [ ] P 10 P c
+	[7   ] P lf 2 3 ^ % sn 3 sl lCx [  ] P 10 P c
+] sP
+
+
+# LOGIC
+
+# Function in the register 'J': jump. Makes a jump (an appropriate move).
+# Gets from the main stack:
+# 	final coordinate
+# 	start coordinate
+# Puts into the 'f' register:
+# 	new state
+[
+	s2 s1
+
+	# Starting point	
+	l1 10 / s3
+	l1 10 % s4
+	l3 l4 lBx s1
+
+	# Final point
+	l2 10 / s5
+	l2 10 % s6
+	l5 l6 lBx s2
+
+	# Middle point
+	l3 l5 + 2 /
+	l4 l6 + 2 /
+	lBx s3
+
+	lf 2 l2 ^ + 2 l1 ^ - 2 l3 ^ - sf
+] sJ
+
+
+# Function in the register 'M': main. Handles one step.
+[
+	lPx 		# Print current field state
+	lFx 		# Check for win/lose
+	? ? 		# Take input
+	lVx 1 =I	# Validate input
+	lJx		# Make a move
+	lMx		# Recursive call
+] sM
+
+# Field initialization
+137405399039 sf
+
+lMx
