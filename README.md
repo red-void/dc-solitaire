@@ -6,7 +6,7 @@ Any peg can jump over an adjacent peg into an empty cell. After that the jumped 
 
 # Interface
 
-Every turn the game will ask your for two inputs. You should input the coordinates of the peg you want to move and the coordinates of the destination cell. Coordinates pair is a two-digit number: the first digit represents a row, the second one represents a column.
+Every turn the game will ask you for two inputs. You should input the coordinates of the peg you want to move and the coordinates of the destination cell. Coordinate pair is a two-digit number: the first digit represents a row, the second one represents a column.
 
 For example:
 ```
