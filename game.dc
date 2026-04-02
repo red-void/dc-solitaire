@@ -7,6 +7,8 @@
 # l — string length
 # n — number
 # p — possible moves
+# v — valid move flag
+# q — quit flag
 # 1,2,3,4,5,6,7,8,9,0 — auxiliary registers to use in non-recursive functions.
 
 
@@ -122,20 +124,19 @@
 ] sE
 
 
-# Function in the register 'V': validation. Fully validates user input, clears the main stack in case it is invalid.
+# Function in the register 'V': validation. Fully validates user input, clears the main stack in case it is invalid, sets the valid move flag properly.
 # Gets from the main stack:
 # 	final coordinate
 # 	start coordinate
 # Puts into the main stack:
 # 	start coordinate if both coordinates are valid
 # 	final coordinate if both coordinates are valid
-# 	0 if both coordinates are valid, 1 otherwise
 [
-	[c 1 q] s0
+	[c 1 sv q] s0
 	lEx 0 !=0 
 	lDx 0 !=0
 	lAx 0 !=0
-	0
+	0 sv
 ] sV
 
 
@@ -150,7 +151,7 @@
 [
 	li 49 / 7 ~ 1 + 10 * + 1 + 
 	li 49 % 7 ~ 1 + 10 * + 1 +
-	lVx 1 - lp + sp
+	lVx 1 lv - lp + sp
 	li 1 + si
 	li 2401 >L
 ] sL
@@ -167,14 +168,14 @@
 ] sW
 
 
-# Function in the register 'F': finish check. Analyzes a current field state and quits in case of win or lose.
+# Function in the register 'F': finish check. Analyzes a current field state and sets the quit flag in case of win or lose.
 # Gets from the shared variables:
 # 	f: current field state
 [
 	# Win combination analysis
 	0 si
 	0 sb
-	[[Congratulations!] P 10 P 10000 Q] s1
+	[lPx [Congratulations!] P 10 P 1 sq q] s1
 	lWx
 	lb 1=1
 
@@ -182,7 +183,7 @@
 	0 si
 	0 sp
 	lLx
-	[[Game over!] P 10 P 10000 Q] s1
+	[lPx [Game over!] P 10 P 1 sq q] s1
 	lp 0=1
 ] sF
 
@@ -197,8 +198,8 @@
 [[.]] s.
 
 
-# Function in the register 'I': illegal move. Prints a corresponding message and proceeds to the next iteration of the main function.
-[[Illegal move] P 10 P lMx] sI
+# Function in the register 'I': illegal move. Prints a corresponding message and clears the main stack.
+[[Illegal move] P 10 P c] sI
 
 
 # Function in the register 'C': converter. Converts a number into a binary form with '*' and '.' symbols and prints it.
@@ -255,7 +256,6 @@
 	l3 l5 + 2 /
 	l4 l6 + 2 /
 	lBx s3
-
 	lf 2 l2 ^ + 2 l1 ^ - 2 l3 ^ - sf
 ] sJ
 
@@ -263,11 +263,11 @@
 # Function in the register 'M': main. Handles one step.
 [
 	lPx 		# Print current field state
-	lFx 		# Check for win/lose
 	? ? 		# Take input
-	lVx 1 =I	# Validate input
-	lJx		# Make a move
-	lMx		# Recursive call
+	lVx lv 1=I	# Validate input
+	lv 0=J		# Make a move in case valid flag is 0
+	lv 0=F		# Check for win/lose in case valid flag is 0
+	lq 0=M		# Recursive call in case quit flag is 0
 ] sM
 
 # Field initialization
