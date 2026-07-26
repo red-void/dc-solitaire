@@ -264,6 +264,8 @@
 [
 	lPx 		# Print current field state
 	? ? 		# Take input
+	27 P 91 P [H] P # Move cursor
+	27 P 91 P [J] P # Clear screen
 	lVx lv 1=I	# Validate input
 	lv 0=J		# Make a move in case valid flag is 0
 	lv 0=F		# Check for win/lose in case valid flag is 0
